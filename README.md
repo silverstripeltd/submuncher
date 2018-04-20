@@ -2,4 +2,4 @@
 
 Handy tool for consolidating subnets into as few subnets as possible.
 
-Inspired by https://github.com/andrewandante/submuncher.
+Inspired by @andrewandante https://github.com/andrewandante/submuncher.

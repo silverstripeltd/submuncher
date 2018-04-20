@@ -1,0 +1,23 @@
+tools:
+  php_sim:
+    min_mass: 30 # Defaults to 16
+  external_code_coverage:
+    timeout: 1200 # Timeout in seconds.
+
+filter:
+  excluded_paths:
+    - 'tests/*'
+    - 'vendor/*'
+
+build:
+  dependencies:
+    override:
+      - "composer install --no-dev --no-interaction --no-progress --no-suggest --optimize-autoloader --verbose --profile"
+  tests:
+    override:
+      - php-scrutinizer-run
+  nodes:
+    php71:
+      environment:
+        php:
+          version: 7.1

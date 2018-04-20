@@ -1,0 +1,79 @@
+version: 2
+jobs:
+  # this composer builds the code and stores it so other steps can reuse it
+  build:
+    working_directory: ~/silverstripeltd/submuncher
+    parallelism: 1
+    shell: /bin/bash --login
+    docker:
+    - image: silverstripe/dashboard-ci:latest
+    steps:
+    - run: sudo composer self-update
+    - checkout
+    - restore_cache:
+        keys:
+        - composer-{{ checksum "composer.lock" }}
+        - composer-
+    - run: sudo rm /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini
+    - run: composer install --prefer-dist --no-interaction --no-progress --no-suggest --optimize-autoloader --verbose --profile
+    - save_cache:
+        key: composer-{{ checksum "composer.lock" }}
+        paths:
+        - vendor
+        - ~/.composer/cache
+    - persist_to_workspace:
+        root: /home/circleci/silverstripeltd/
+        paths:
+          - submuncher
+
+  # Runs the phpunit tests with code coverage and sent that to scrutinizer
+  php_tests_coverage:
+    working_directory: ~/silverstripeltd/submuncher
+    parallelism: 1
+    shell: /bin/bash --login
+    environment:
+      CIRCLE_TEST_REPORTS: /tmp/circleci-test-results
+    docker:
+    - image: silverstripe/dashboard-ci:latest
+    steps:
+    - attach_workspace:
+        at: ~/silverstripeltd
+    - run: mkdir -p $CIRCLE_TEST_REPORTS
+    - run: git config --global user.email "circleci@example.invalid" && git config --global user.name "CircleCI"
+    - run: ./vendor/bin/phpunit --log-junit $CIRCLE_TEST_REPORTS/junit.xml --coverage-clover=$CIRCLE_TEST_REPORTS/coverage.clover
+    - run:
+        command: |
+          wget https://scrutinizer-ci.com/ocular.phar
+          php ocular.phar code-coverage:upload --access-token="$OCULAR_ACCESS_TOKEN" --format=php-clover $CIRCLE_TEST_REPORTS/coverage.clover
+        when: always
+    - store_test_results:
+        path: /tmp/circleci-test-results
+    - store_artifacts:
+        path: /tmp/circleci-test-results
+
+  # Check that the code is formatted properly
+  php_codestyle:
+    working_directory: ~/silverstripeltd/submuncher
+    parallelism: 1
+    shell: /bin/bash --login
+    docker:
+    - image: silverstripe/dashboard-ci:latest
+    steps:
+    - attach_workspace:
+        at: ~/silverstripeltd
+    - run: sudo rm /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini
+    - run: ./vendor/bin/php-cs-fixer fix -v --dry-run --stop-on-violation --using-cache=no
+
+
+# This workflow fans out from the build job to several tests that can run in parallel if there are enough free slots
+workflows:
+  version: 2
+  build_and_test:
+    jobs:
+      - build
+      - php_tests_coverage:
+          requires:
+            - build
+      - php_codestyle:
+          requires:
+            - build
